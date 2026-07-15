@@ -170,6 +170,32 @@ async function initializeLocal(profile = 'interview') {
     }
 }
 
+async function initializeOpenAI(profile = 'interview') {
+    const prefs = await storage.getPreferences();
+    const creds = await storage.getCredentials();
+
+    const config = {
+        baseUrl: prefs.openaiBaseUrl || 'https://api.openai.com/v1',
+        apiKey: creds.openaiKey || '',
+        model: prefs.openaiModel || 'gpt-5-mini',
+        language: prefs.selectedLanguage || 'ru-RU',
+        sttMode: prefs.openaiSttMode || 'local',
+        whisperModel: prefs.whisperModel || 'Xenova/whisper-small',
+        sttBaseUrl: prefs.openaiSttBaseUrl || '',
+        sttApiKey: creds.openaiSttKey || '',
+        sttModel: prefs.openaiSttModel || 'whisper-1',
+    };
+
+    const success = await ipcRenderer.invoke('initialize-openai', config, profile, prefs.customPrompt || '');
+    if (success) {
+        cheatingDaddy.setStatus('OpenAI Live');
+        return true;
+    } else {
+        cheatingDaddy.setStatus('error');
+        return false;
+    }
+}
+
 async function initializeCloud(profile = 'interview') {
     const creds = await storage.getCredentials();
     const token = creds.cloudToken;
@@ -1029,6 +1055,7 @@ const cheatingDaddy = {
     initializeGemini,
     initializeCloud,
     initializeLocal,
+    initializeOpenAI,
     startCapture,
     stopCapture,
     sendTextMessage,

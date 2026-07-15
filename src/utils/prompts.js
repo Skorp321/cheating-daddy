@@ -201,7 +201,36 @@ Provide direct exam answers in **markdown format**. Include the question text, t
     },
 };
 
-function buildSystemPrompt(promptParts, customPrompt = '', googleSearchEnabled = true) {
+// Default response language. Change this (or the selectedLanguage preference) to
+// switch the language the assistant answers in.
+const DEFAULT_LANGUAGE = 'ru-RU';
+
+const LANGUAGE_NAMES = {
+    'en-US': 'English',
+    'en-GB': 'English',
+    'ru-RU': 'Russian',
+    'de-DE': 'German',
+    'fr-FR': 'French',
+    'es-ES': 'Spanish',
+    'it-IT': 'Italian',
+    'pt-BR': 'Portuguese',
+    'zh-CN': 'Chinese',
+    'ja-JP': 'Japanese',
+    'ko-KR': 'Korean',
+};
+
+function getLanguageName(code) {
+    if (!code) return LANGUAGE_NAMES[DEFAULT_LANGUAGE];
+    if (LANGUAGE_NAMES[code]) return LANGUAGE_NAMES[code];
+    try {
+        const displayNames = new Intl.DisplayNames(['en'], { type: 'language' });
+        return displayNames.of(code.split('-')[0]) || LANGUAGE_NAMES[DEFAULT_LANGUAGE];
+    } catch {
+        return LANGUAGE_NAMES[DEFAULT_LANGUAGE];
+    }
+}
+
+function buildSystemPrompt(promptParts, customPrompt = '', googleSearchEnabled = true, language = DEFAULT_LANGUAGE) {
     const sections = [promptParts.intro, '\n\n', promptParts.formatRequirements];
 
     // Only add search usage section if Google Search is enabled
@@ -211,15 +240,22 @@ function buildSystemPrompt(promptParts, customPrompt = '', googleSearchEnabled =
 
     sections.push('\n\n', promptParts.content, '\n\nUser-provided context\n-----\n', customPrompt, '\n-----\n\n', promptParts.outputInstructions);
 
+    const languageName = getLanguageName(language);
+    sections.push(
+        `\n\n**RESPONSE LANGUAGE:**\nAlways write your entire response in ${languageName}, no matter what language the interviewer/other party speaks. Every word you output must be in ${languageName}.`
+    );
+
     return sections.join('');
 }
 
-function getSystemPrompt(profile, customPrompt = '', googleSearchEnabled = true) {
+function getSystemPrompt(profile, customPrompt = '', googleSearchEnabled = true, language = DEFAULT_LANGUAGE) {
     const promptParts = profilePrompts[profile] || profilePrompts.interview;
-    return buildSystemPrompt(promptParts, customPrompt, googleSearchEnabled);
+    return buildSystemPrompt(promptParts, customPrompt, googleSearchEnabled, language);
 }
 
 module.exports = {
     profilePrompts,
     getSystemPrompt,
+    getLanguageName,
+    DEFAULT_LANGUAGE,
 };
