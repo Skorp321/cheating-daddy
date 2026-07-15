@@ -13,14 +13,16 @@ const DEFAULT_CONFIG = {
 
 const DEFAULT_CREDENTIALS = {
     apiKey: '',
-    groqApiKey: ''
+    groqApiKey: '',
+    openaiKey: '',
+    openaiSttKey: ''
 };
 
 const DEFAULT_PREFERENCES = {
     customPrompt: '',
     providerMode: 'byok',
     selectedProfile: 'interview',
-    selectedLanguage: 'en-US',
+    selectedLanguage: 'ru-RU',
     selectedScreenshotInterval: '5',
     selectedImageQuality: 'medium',
     advancedMode: false,
@@ -31,6 +33,11 @@ const DEFAULT_PREFERENCES = {
     ollamaHost: 'http://127.0.0.1:11434',
     ollamaModel: 'llama3.1',
     whisperModel: 'Xenova/whisper-small',
+    openaiBaseUrl: 'https://api.openai.com/v1',
+    openaiModel: 'gpt-5-mini',
+    openaiSttMode: 'local', // 'local' (on-device Whisper) | 'remote' (/audio/transcriptions)
+    openaiSttBaseUrl: '', // empty → reuse openaiBaseUrl
+    openaiSttModel: 'whisper-1',
 };
 
 const DEFAULT_KEYBINDS = null; // null means use system defaults

@@ -499,6 +499,13 @@ export class MainView extends LitElement {
         _ollamaModel: { state: true },
         _whisperModel: { state: true },
         _showLocalHelp: { state: true },
+        // OpenAI-compatible API state
+        _openaiBaseUrl: { state: true },
+        _openaiModel: { state: true },
+        _openaiSttMode: { state: true },
+        _openaiSttBaseUrl: { state: true },
+        _openaiSttKey: { state: true },
+        _openaiSttModel: { state: true },
     };
 
     constructor() {
@@ -521,6 +528,12 @@ export class MainView extends LitElement {
         this._ollamaHost = 'http://127.0.0.1:11434';
         this._ollamaModel = 'llama3.1';
         this._whisperModel = 'Xenova/whisper-small';
+        this._openaiBaseUrl = 'https://api.openai.com/v1';
+        this._openaiModel = 'gpt-5-mini';
+        this._openaiSttMode = 'local';
+        this._openaiSttBaseUrl = '';
+        this._openaiSttKey = '';
+        this._openaiSttModel = 'whisper-1';
 
         this._animId = null;
         this._time = 0;
@@ -555,6 +568,14 @@ export class MainView extends LitElement {
             this._ollamaHost = prefs.ollamaHost || 'http://127.0.0.1:11434';
             this._ollamaModel = prefs.ollamaModel || 'llama3.1';
             this._whisperModel = prefs.whisperModel || 'Xenova/whisper-small';
+
+            // Load OpenAI-compatible API settings
+            this._openaiBaseUrl = prefs.openaiBaseUrl || 'https://api.openai.com/v1';
+            this._openaiModel = prefs.openaiModel || 'gpt-5-mini';
+            this._openaiSttMode = prefs.openaiSttMode || 'local';
+            this._openaiSttBaseUrl = prefs.openaiSttBaseUrl || '';
+            this._openaiSttKey = creds.openaiSttKey || '';
+            this._openaiSttModel = prefs.openaiSttModel || 'whisper-1';
 
             this.requestUpdate();
         } catch (e) {
@@ -743,6 +764,47 @@ export class MainView extends LitElement {
         this.requestUpdate();
     }
 
+    async _saveOpenaiBaseUrl(val) {
+        this._openaiBaseUrl = val;
+        this._keyError = false;
+        await cheatingDaddy.storage.updatePreference('openaiBaseUrl', val);
+        this.requestUpdate();
+    }
+
+    async _saveOpenaiModel(val) {
+        this._openaiModel = val;
+        this._keyError = false;
+        await cheatingDaddy.storage.updatePreference('openaiModel', val);
+        this.requestUpdate();
+    }
+
+    async _saveOpenaiSttMode(val) {
+        this._openaiSttMode = val;
+        await cheatingDaddy.storage.updatePreference('openaiSttMode', val);
+        this.requestUpdate();
+    }
+
+    async _saveOpenaiSttBaseUrl(val) {
+        this._openaiSttBaseUrl = val;
+        await cheatingDaddy.storage.updatePreference('openaiSttBaseUrl', val);
+        this.requestUpdate();
+    }
+
+    async _saveOpenaiSttKey(val) {
+        this._openaiSttKey = val;
+        try {
+            const creds = await cheatingDaddy.storage.getCredentials().catch(() => ({}));
+            await cheatingDaddy.storage.setCredentials({ ...creds, openaiSttKey: val });
+        } catch (e) {}
+        this.requestUpdate();
+    }
+
+    async _saveOpenaiSttModel(val) {
+        this._openaiSttModel = val;
+        await cheatingDaddy.storage.updatePreference('openaiSttModel', val);
+        this.requestUpdate();
+    }
+
     _handleProfileChange(e) {
         this.onProfileChange(e.target.value);
     }
@@ -761,6 +823,13 @@ export class MainView extends LitElement {
         } else if (this._mode === 'local') {
             // Local mode doesn't need API keys, just Ollama host
             if (!this._ollamaHost.trim()) {
+                return;
+            }
+        } else if (this._mode === 'openai') {
+            // API key is optional (local servers), but base URL and model are required
+            if (!this._openaiBaseUrl.trim() || !this._openaiModel.trim()) {
+                this._keyError = true;
+                this.requestUpdate();
                 return;
             }
         }
@@ -854,6 +923,7 @@ export class MainView extends LitElement {
 
             <div class="mode-links">
                 <button class="mode-link" @click=${() => this._saveMode('local')}>Use local AI</button>
+                <button class="mode-link" @click=${() => this._saveMode('openai')}>Use OpenAI-compatible API</button>
             </div>
         `;
     }
@@ -908,6 +978,117 @@ export class MainView extends LitElement {
 
             <div class="mode-links">
                 <button class="mode-link" @click=${() => this._saveMode('byok')}>Use own API keys</button>
+                <button class="mode-link" @click=${() => this._saveMode('openai')}>Use OpenAI-compatible API</button>
+            </div>
+        `;
+    }
+
+    // ── OpenAI-compatible API mode ──
+
+    _renderOpenaiMode() {
+        return html`
+            <div class="form-group">
+                <label class="form-label">Base URL</label>
+                <input
+                    type="text"
+                    placeholder="https://api.openai.com/v1"
+                    .value=${this._openaiBaseUrl}
+                    @input=${e => this._saveOpenaiBaseUrl(e.target.value)}
+                    class=${this._keyError && !this._openaiBaseUrl.trim() ? 'error' : ''}
+                />
+                <div class="form-hint">OpenAI, OpenRouter, LM Studio, vLLM, Groq, Ollama (/v1) — the URL must include /v1 where applicable</div>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">API Key</label>
+                <input
+                    type="password"
+                    placeholder="Optional for local servers"
+                    .value=${this._openaiKey}
+                    @input=${e => this._saveOpenaiKey(e.target.value)}
+                />
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Model</label>
+                <input
+                    type="text"
+                    placeholder="gpt-5-mini"
+                    .value=${this._openaiModel}
+                    @input=${e => this._saveOpenaiModel(e.target.value)}
+                    class=${this._keyError && !this._openaiModel.trim() ? 'error' : ''}
+                />
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Speech-to-Text</label>
+                <select
+                    .value=${this._openaiSttMode}
+                    @change=${e => this._saveOpenaiSttMode(e.target.value)}
+                >
+                    <option value="local" ?selected=${this._openaiSttMode === 'local'}>Local Whisper (on-device)</option>
+                    <option value="remote" ?selected=${this._openaiSttMode === 'remote'}>Remote transcription API</option>
+                </select>
+            </div>
+
+            ${this._openaiSttMode === 'local'
+                ? html`
+                      <div class="form-group">
+                          <div class="whisper-label-row">
+                              <label class="form-label">Whisper Model</label>
+                              ${this.whisperDownloading ? html`<div class="whisper-spinner"></div>` : ''}
+                          </div>
+                          <select
+                              .value=${this._whisperModel}
+                              @change=${e => this._saveWhisperModel(e.target.value)}
+                          >
+                              <option value="Xenova/whisper-tiny" ?selected=${this._whisperModel === 'Xenova/whisper-tiny'}>Tiny (fastest, least accurate)</option>
+                              <option value="Xenova/whisper-base" ?selected=${this._whisperModel === 'Xenova/whisper-base'}>Base</option>
+                              <option value="Xenova/whisper-small" ?selected=${this._whisperModel === 'Xenova/whisper-small'}>Small (recommended)</option>
+                              <option value="Xenova/whisper-medium" ?selected=${this._whisperModel === 'Xenova/whisper-medium'}>Medium (most accurate, slowest)</option>
+                          </select>
+                          <div class="form-hint">${this.whisperDownloading ? 'Downloading model...' : 'Downloaded automatically on first use'}</div>
+                      </div>
+                  `
+                : html`
+                      <div class="form-group">
+                          <label class="form-label">STT Base URL</label>
+                          <input
+                              type="text"
+                              placeholder="Leave empty to use the base URL above"
+                              .value=${this._openaiSttBaseUrl}
+                              @input=${e => this._saveOpenaiSttBaseUrl(e.target.value)}
+                          />
+                          <div class="form-hint">Any /audio/transcriptions endpoint (OpenAI, Groq, faster-whisper)</div>
+                      </div>
+
+                      <div class="form-group">
+                          <label class="form-label">STT API Key</label>
+                          <input
+                              type="password"
+                              placeholder="Optional — falls back to API key above"
+                              .value=${this._openaiSttKey}
+                              @input=${e => this._saveOpenaiSttKey(e.target.value)}
+                          />
+                      </div>
+
+                      <div class="form-group">
+                          <label class="form-label">STT Model</label>
+                          <input
+                              type="text"
+                              placeholder="whisper-1"
+                              .value=${this._openaiSttModel}
+                              @input=${e => this._saveOpenaiSttModel(e.target.value)}
+                          />
+                      </div>
+                  `}
+
+            ${this._renderStartButton()}
+            ${this._renderDivider()}
+
+            <div class="mode-links">
+                <button class="mode-link" @click=${() => this._saveMode('byok')}>Use own API keys</button>
+                <button class="mode-link" @click=${() => this._saveMode('local')}>Use local AI</button>
             </div>
         `;
     }
@@ -927,15 +1108,20 @@ export class MainView extends LitElement {
                     </div>
                 ` : html`
                     <div class="page-title">
-                        ${html`Cheating Daddy <span class="mode-suffix">BYOK</span>`}
+                        ${html`Cheating Daddy <span class="mode-suffix">${this._mode === 'openai' ? 'Custom API' : 'BYOK'}</span>`}
                     </div>
                 `}
                 <div class="page-subtitle">
-                    ${this._mode === 'byok' ? 'Bring your own API keys' : 'Run models locally on your machine'}
+                    ${this._mode === 'byok'
+                        ? 'Bring your own API keys'
+                        : this._mode === 'openai'
+                          ? 'Any OpenAI-compatible endpoint'
+                          : 'Run models locally on your machine'}
                 </div>
 
                 <!-- Cloud mode render branch intentionally disabled. -->
                 ${this._mode === 'byok' ? this._renderByokMode() : ''}
+                ${this._mode === 'openai' ? this._renderOpenaiMode() : ''}
                 ${this._mode === 'local' ? (this._showLocalHelp ? this._renderLocalHelp() : this._renderLocalMode()) : ''}
             </div>
         `;

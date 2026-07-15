@@ -13,7 +13,14 @@ function getLocalAi() {
     return _localai;
 }
 
-// Provider mode: 'byok', 'cloud', or 'local'
+// Lazy-loaded to avoid circular dependency (openai.js imports from gemini.js)
+let _openai = null;
+function getOpenAi() {
+    if (!_openai) _openai = require('./openai');
+    return _openai;
+}
+
+// Provider mode: 'byok', 'cloud', 'local', or 'openai'
 let currentProviderMode = 'byok';
 
 // Groq conversation history for context
@@ -454,7 +461,7 @@ async function initializeGeminiSession(apiKey, customPrompt = '', profile = 'int
     const enabledTools = await getEnabledTools();
     const googleSearchEnabled = enabledTools.some(tool => tool.googleSearch);
 
-    const systemPrompt = getSystemPrompt(profile, customPrompt, googleSearchEnabled);
+    const systemPrompt = getSystemPrompt(profile, customPrompt, googleSearchEnabled, language);
     currentSystemPrompt = systemPrompt; // Store for Groq
 
     // Initialize new conversation session only on first connect
@@ -706,6 +713,8 @@ async function startMacOSAudioCapture(geminiSessionRef) {
                 sendCloudAudio(monoChunk);
             } else if (currentProviderMode === 'local') {
                 getLocalAi().processLocalAudio(monoChunk);
+            } else if (currentProviderMode === 'openai') {
+                getOpenAi().processOpenAIAudio(monoChunk, 'system');
             } else {
                 const base64Data = monoChunk.toString('base64');
                 sendAudioToGemini(base64Data, geminiSessionRef);
@@ -874,6 +883,15 @@ function setupGeminiIpcHandlers(geminiSessionRef) {
         return success;
     });
 
+    ipcMain.handle('initialize-openai', async (event, config, profile, customPrompt) => {
+        currentProviderMode = 'openai';
+        const success = await getOpenAi().initializeOpenAISession(config, profile, customPrompt);
+        if (!success) {
+            currentProviderMode = 'byok';
+        }
+        return success;
+    });
+
     ipcMain.handle('send-audio-content', async (event, { data, mimeType }) => {
         if (currentProviderMode === 'cloud') {
             try {
@@ -892,6 +910,16 @@ function setupGeminiIpcHandlers(geminiSessionRef) {
                 return { success: true };
             } catch (error) {
                 console.error('Error sending local audio:', error);
+                return { success: false, error: error.message };
+            }
+        }
+        if (currentProviderMode === 'openai') {
+            try {
+                const pcmBuffer = Buffer.from(data, 'base64');
+                getOpenAi().processOpenAIAudio(pcmBuffer, 'system');
+                return { success: true };
+            } catch (error) {
+                console.error('Error sending openai audio:', error);
                 return { success: false, error: error.message };
             }
         }
@@ -927,6 +955,16 @@ function setupGeminiIpcHandlers(geminiSessionRef) {
                 return { success: true };
             } catch (error) {
                 console.error('Error sending local mic audio:', error);
+                return { success: false, error: error.message };
+            }
+        }
+        if (currentProviderMode === 'openai') {
+            try {
+                const pcmBuffer = Buffer.from(data, 'base64');
+                getOpenAi().processOpenAIAudio(pcmBuffer, 'mic');
+                return { success: true };
+            } catch (error) {
+                console.error('Error sending openai mic audio:', error);
                 return { success: false, error: error.message };
             }
         }
@@ -972,6 +1010,11 @@ function setupGeminiIpcHandlers(geminiSessionRef) {
                 return result;
             }
 
+            if (currentProviderMode === 'openai') {
+                const result = await getOpenAi().sendOpenAIImage(data, prompt);
+                return result;
+            }
+
             // Use HTTP API instead of realtime session
             const result = await sendImageToGeminiHttp(data, prompt);
             return result;
@@ -1003,6 +1046,16 @@ function setupGeminiIpcHandlers(geminiSessionRef) {
                 return await getLocalAi().sendLocalText(text.trim());
             } catch (error) {
                 console.error('Error sending local text:', error);
+                return { success: false, error: error.message };
+            }
+        }
+
+        if (currentProviderMode === 'openai') {
+            try {
+                console.log('Sending text to OpenAI-compatible API:', text);
+                return await getOpenAi().sendOpenAIText(text.trim());
+            } catch (error) {
+                console.error('Error sending openai text:', error);
                 return { success: false, error: error.message };
             }
         }
@@ -1065,6 +1118,12 @@ function setupGeminiIpcHandlers(geminiSessionRef) {
 
             if (currentProviderMode === 'local') {
                 getLocalAi().closeLocalSession();
+                currentProviderMode = 'byok';
+                return { success: true };
+            }
+
+            if (currentProviderMode === 'openai') {
+                getOpenAi().closeOpenAISession();
                 currentProviderMode = 'byok';
                 return { success: true };
             }
